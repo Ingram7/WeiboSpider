@@ -27,7 +27,7 @@ CONCURRENT_REQUESTS = 16
 # Configure a delay for requests for the same website (default: 0)
 # See https://doc.scrapy.org/en/latest/topics/settings.html#download-delay
 # See also autothrottle settings and docs
-DOWNLOAD_DELAY = 3
+DOWNLOAD_DELAY = 1
 # The download delay setting will honor only one of:
 #CONCURRENT_REQUESTS_PER_DOMAIN = 16
 #CONCURRENT_REQUESTS_PER_IP = 16
@@ -43,8 +43,6 @@ DOWNLOAD_DELAY = 3
 # 请将Cookie替换成你自己的Cookie
 DEFAULT_REQUEST_HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.13; rv:61.0) Gecko/20100101 Firefox/61.0',
-    'Cookie': '_T_WM=63026180584; WEIBOCN_FROM=1110106030; MLOGIN=1; SSOLoginState=1559802101; ALF=1562394101; SCF=ApQjNIh6QNqgIQ-rY6cQ5Vd-Ht3cDeOXBCYhu7Thh5eHq398aEchal9YOFrldnP2s-y2kA6xrLyieiMgIWBJpjs.; SUB=_2A25x_MClDeRhGeBP6lAT8S7FyD6IHXVTHuDtrDV6PUNbktAKLVSjkW1NRZBMrmsZ6yihxV588XVqgEdU_CLHdqcF; SUBP=0033WrSXqPxfM725Ws9jqgMF55529P9D9WFH-e7il7QNLoufDR1NovI_5JpX5KzhUgL.FoqpeKzEeK54e0z2dJLoIpjLxK.L1-zLB-2LxKqLB.eLB-zLxKnLBK2LB-zt; SUHB=0M2FZ4A1eGD2gJ; M_WEIBOCN_PARAMS=lfid%3D1076032803301701%26luicode%3D20000174%26uicode%3D20000174'
-
 }
 
 # Enable or disable spider middlewares
@@ -58,7 +56,9 @@ DEFAULT_REQUEST_HEADERS = {
 DOWNLOADER_MIDDLEWARES = {
     'WeiboSpider.middlewares.UserAgentMiddleware': None,
     'scrapy.downloadermiddlewares.cookies.CookiesMiddleware': None,
-    'scrapy.downloadermiddlewares.redirect.RedirectMiddleware': None
+    'scrapy.downloadermiddlewares.redirect.RedirectMiddleware': None,
+    'WeiboSpider.middlewares.CookiesMiddleware': 554,
+    'WeiboSpider.middlewares.ProxyMiddleware': 555,
 }
 
 # Enable or disable extensions
@@ -70,8 +70,11 @@ DOWNLOADER_MIDDLEWARES = {
 # Configure item pipelines
 # See https://doc.scrapy.org/en/latest/topics/item-pipeline.html
 ITEM_PIPELINES = {
-   'WeiboSpider.pipelines.MongoDBPipeline': 300,
+    'WeiboSpider.pipelines.TimePipeline': 300,
+    'WeiboSpider.pipelines.WeiboSpiderPipeline': 301,
+    'WeiboSpider.pipelines.MongoPipeline': 302,
 }
+
 # Enable and configure the AutoThrottle extension (disabled by default)
 # See https://doc.scrapy.org/en/latest/topics/autothrottle.html
 #AUTOTHROTTLE_ENABLED = True
@@ -93,8 +96,22 @@ ITEM_PIPELINES = {
 #HTTPCACHE_IGNORE_HTTP_CODES = []
 #HTTPCACHE_STORAGE = 'scrapy.extensions.httpcache.FilesystemCacheStorage'
 
+RETRY_HTTP_CODES = [401, 403, 408, 414, 500, 502, 503, 504]
+
 # MongoDb 配置
 
 LOCAL_MONGO_HOST = '127.0.0.1'
 LOCAL_MONGO_PORT = 27017
 DB_NAME = 'weibocn'
+
+
+# ip代理 池
+PROXY_URL = 'http://127.0.0.1:5000/proxy/target/weibo/cn'
+
+
+# 记录日志
+# import datetime
+# LOG_LEVEL = 'WARNING'
+# to_day = datetime.datetime.now()
+# log_file_path = 'scrapy_{}_{}_{}.log'.format(to_day.year, to_day.month, to_day.day)
+# LOG_FILE = log_file_path
