@@ -8,7 +8,7 @@
 import pymongo
 from pymongo.errors import DuplicateKeyError
 from WeiboSpider.items import *
-from WeiboSpider.settings import LOCAL_MONGO_HOST, LOCAL_MONGO_PORT, DB_NAME
+# from WeiboSpider.settings import LOCAL_MONGO_HOST, LOCAL_MONGO_PORT, DB_NAME
 
 import re
 import time
@@ -18,7 +18,8 @@ import datetime
 class TimePipeline():
     def process_item(self, item, spider):
         if isinstance(item, TweetsItem) or isinstance(item, InformationItem) \
-                or isinstance(item, RelationshipsItem) or isinstance(item, CommentItem):
+                or isinstance(item, RelationshipsItem)or isinstance(item, CommentItem):
+
             now = time.strftime('%Y-%m-%d %H:%M', time.localtime())
             item['crawled_at'] = now
         return item
@@ -51,6 +52,7 @@ class WeiboSpiderPipeline():
 
     def process_item(self, item, spider):
         if isinstance(item, TweetsItem) or isinstance(item, CommentItem):
+
             if item.get('created_at'):
                 item['created_at'] = item['created_at'].strip()
                 item['created_at'] = self.parse_time(item.get('created_at'))
@@ -91,9 +93,6 @@ class WeiboSpiderPipeline():
 #             说明有重复数据
 #             """
 #             pass
-
-import pymongo
-
 
 class MongoPipeline(object):
     def __init__(self, local_mongo_host, local_mongo_port, mongo_db):
@@ -137,7 +136,6 @@ class MongoPipeline(object):
                     }
                 },
                 True)
-
 
         elif isinstance(item, CommentItem):
             self.insert_item(self.db[item.collection], item)

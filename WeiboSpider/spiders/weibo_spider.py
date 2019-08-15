@@ -2,19 +2,18 @@
 import scrapy
 from scrapy import Request
 from ..items import *
-
 import re
 
 class WeiboSpiderSpider(scrapy.Spider):
     name = 'weibo_spider'
     allowed_domains = ['weibo.cn']
-    # start_urls = ['http://weibo.cn/']
     base_url = "https://weibo.cn"
 
     def start_requests(self):
         start_uids = [
-            '2803301701',  # 人民日报
-            # '1699432410'  # 新华社
+              '5756404150'   # 英雄联盟赛事
+            # '2803301701',  # 人民日报
+            # '1699432410'   # 新华社
             # '1974576991',  # 环球时报
             # '5476386628',  # 侠客岛
         ]
@@ -24,8 +23,8 @@ class WeiboSpiderSpider(scrapy.Spider):
     def parse_information(self, response):
         """ 抓取个人信息 """
         information_item = InformationItem()
-
         information_item['id'] = re.findall('(\d+)/info', response.url)[0]
+
         # 获取标签里的所有text()
         information_text = ";".join(response.xpath('//div[@class="c"]//text()').extract())
 
@@ -78,7 +77,9 @@ class WeiboSpiderSpider(scrapy.Spider):
         yield Request(self.base_url + '/u/{}'.format(information_item['id']),
                       callback=self.parse_further_information,
                       meta={'item': information_item},
-                      dont_filter=True, priority=1)
+                      dont_filter=True,
+                      priority=1
+                      )
 
     def parse_further_information(self, response):
 
@@ -99,21 +100,32 @@ class WeiboSpiderSpider(scrapy.Spider):
 
         # 获取用户微博    请求顺序priority(优先级)默认值是0,越大优先级越大,允许是负值
         yield Request(url=self.base_url + '/{}/profile?page=1'.format(information_item['id']),
-                      callback=self.parse_tweet, dont_filter=True, priority=1)
+                      callback=self.parse_tweet, dont_filter=True,
+                      priority=1)
 
         # 获取关注列表
         yield Request(url=self.base_url + '/{}/follow?page=1'.format(information_item['id']),
                       callback=self.parse_follow,
-                      meta={'id':information_item['id']},
-                      dont_filter=True, priority=10)
+                      meta={'id': information_item['id']},
+                      dont_filter=True)
         # 获取粉丝列表
         yield Request(url=self.base_url + '/{}/fans?page=1'.format(information_item['id']),
                       callback=self.parse_fans,
                       meta={'id': information_item['id']},
-                      dont_filter=True, priority=10)
+                      dont_filter=True)
 
     # 解析用户微博
     def parse_tweet(self, response):
+
+        if response.url.endswith('page=1'):
+            # 如果是第1页，一次性获取后面的所有页
+            all_page = re.search(r'/>&nbsp;1/(\d+)页</div>', response.text)
+            if all_page:
+                all_page = all_page.group(1)
+                all_page = int(all_page)
+                for page_num in range(2, all_page + 1):
+                    page_url = response.url.replace('page=1', 'page={}'.format(page_num))
+                    yield Request(page_url, self.parse_tweet, dont_filter=True)
         """
         解析本页的数据
         """
@@ -181,11 +193,10 @@ class WeiboSpiderSpider(scrapy.Spider):
                 if all_content_link:
                     all_content_url = self.base_url + all_content_link.xpath('./@href').extract()[0]
                     yield Request(all_content_url, callback=self.parse_all_content, meta={'item': tweet_item},
-                                  priority=1)
+                                  )
                 else:
                     # 微博内容
-                    tweet_item['content'] = \
-                        ''.join(tweet_node.xpath('./div[1]').xpath('string(.)').extract()
+                    tweet_item['content'] = ''.join(tweet_node.xpath('./div[1]').xpath('string(.)').extract()
                                 ).replace(u'\xa0', '').replace(u'\u3000', '').replace(' ', '').split('赞[', 1)[0]
 
                     if 'location' in tweet_item:
@@ -194,16 +205,14 @@ class WeiboSpiderSpider(scrapy.Spider):
 
                 # 抓取该微博的评论信息
                 comment_url = self.base_url + '/comment/' + tweet_item['weibo_url'].split('/')[-1] + '?page=1'
-                yield Request(url=comment_url, callback=self.parse_comment, meta={'weibo_url': tweet_item['weibo_url']},
-                              priority=-5)
+                yield Request(url=comment_url, callback=self.parse_comment,
+                              meta={'weibo_url': tweet_item['weibo_url']},
+                              )
 
             except Exception as e:
                 self.logger.error(e)
 
-        next_page = response.xpath('//div[@id="pagelist"]//a[contains(text(),"下页")]/@href')
-        if next_page:
-            url = self.base_url + next_page[0].extract()
-            yield Request(url, callback=self.parse_tweet, dont_filter=True)
+
 
     def parse_all_content(self, response):
         # 有阅读全文的情况，获取全文
@@ -211,8 +220,8 @@ class WeiboSpiderSpider(scrapy.Spider):
         tweet_item['content'] = ''.join(response.xpath('//*[@id="M_"]/div[1]').xpath('string(.)').extract()
                                         ).replace(u'\xa0', '').replace(u'\u3000', '').replace(' ', '').split('赞[', 1)[0]
         if 'location' in tweet_item:
-            tweet_item['location'] = \
-            response.xpath('//*[@id="M_"]/div[1]//span[@class="ctt"]/a[last()]/text()').extract()[0]
+            tweet_item['location'] = response.xpath('//*[@id="M_"]/div[1]//span[@class="ctt"]/a[last()]/text()'
+                                                    ).extract()[0]
         yield tweet_item
 
     def parse_follow(self, response):
@@ -225,6 +234,7 @@ class WeiboSpiderSpider(scrapy.Spider):
 
         node_l = response.xpath('//table//td[@valign][2]')
         follows = []
+        id = response.meta['id']
         for node in node_l:
             if node.xpath('./a[1]/text()').extract():
                 url = node.xpath('.//a[text()="关注他" or text()="关注她" or text()="取消关注"]/@href').extract()
@@ -235,15 +245,15 @@ class WeiboSpiderSpider(scrapy.Spider):
                 follows.append(follows_date)
 
                 relationships_item = RelationshipsItem()
-                relationships_item['id'] = response.meta['id']
+                relationships_item['id'] = id
                 relationships_item['follows'] = follows
                 relationships_item['fans'] = []
-        yield relationships_item
+                yield relationships_item
 
         next_page = response.xpath('//div[@id="pagelist"]//a[contains(text(),"下页")]/@href')
         if next_page:
             url = self.base_url + next_page[0].extract()
-            yield Request(url, callback=self.parse_follow, meta={'id': relationships_item['id']}, priority=10)
+            yield Request(url, callback=self.parse_follow, meta={'id': id})
 
     def parse_fans(self, response):
         """
@@ -255,6 +265,7 @@ class WeiboSpiderSpider(scrapy.Spider):
 
         node_l = response.xpath('//table//td[@valign][2]')
         fans = []
+        id = response.meta['id']
         for node in node_l:
             if node.xpath('./a[1]/text()').extract():
 
@@ -266,22 +277,24 @@ class WeiboSpiderSpider(scrapy.Spider):
                 fans.append(fans_date)
 
                 relationships_item = RelationshipsItem()
-                relationships_item['id'] = response.meta['id']
+                relationships_item['id'] = id
                 relationships_item['follows'] = []
                 relationships_item['fans'] = fans
-        yield relationships_item
+                yield relationships_item
 
         next_page = response.xpath('//div[@id="pagelist"]//a[contains(text(),"下页")]/@href')
         if next_page:
             url = self.base_url + next_page[0].extract()
-            yield Request(url, callback=self.parse_fans, meta={'id': relationships_item['id']}, priority=10)
+            yield Request(url, callback=self.parse_fans, meta={'id': id})
 
     # 抓取该微博的评论信息
     def parse_comment(self, response):
+
+        weibo_url = response.meta['weibo_url']
         for comment_node in response.xpath('//div[@class="c" and contains(@id,"C_")]'):
             comment_item = CommentItem()
 
-            comment_item['weibo_url'] = response.meta['weibo_url']
+            comment_item['weibo_url'] = weibo_url
 
             comment_item['comment_user_id'] = comment_node.xpath('./a[1]/@href'
                                                                  ).extract()[0].split('/u/', 1)[-1].split('/', 1)[-1]
@@ -301,5 +314,4 @@ class WeiboSpiderSpider(scrapy.Spider):
         next_page = response.xpath('//div[@id="pagelist"]//a[contains(text(),"下页")]/@href')
         if next_page:
             url = self.base_url + next_page[0].extract()
-            yield Request(url, callback=self.parse_comment,
-                          meta={'weibo_url': comment_item['weibo_url']}, priority=-10)
+            yield Request(url, callback=self.parse_comment, meta={'weibo_url': weibo_url})
